@@ -1,0 +1,65 @@
+# Baut bei jedem Hochladen auf GitHub die Android-App.
+# Ergebnis unter Actions → letzter Lauf → Artifacts:
+#   r3x-mfd-mobile-apk  = Test-APK zum direkten Installieren auf dem Handy
+#   r3x-mfd-mobile-aab  = signiertes App-Bundle für den Play Store (nur wenn die Keystore-Secrets eingetragen sind)
+name: Android APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KS: ${{ secrets.R3X_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Oberfläche bauen
+        run: |
+          npm ci
+          npm run check
+          npm run build
+          npx cap sync android
+
+      - name: Test-APK bauen
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r3x-mfd-mobile-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Play-Store-Bundle bauen (signiert)
+        if: env.HAS_KS == 'true'
+        env:
+          KS: ${{ secrets.R3X_KEYSTORE_BASE64 }}
+          R3X_KEYSTORE_PASSWORD: ${{ secrets.R3X_KEYSTORE_PASSWORD }}
+          R3X_KEY_ALIAS: ${{ secrets.R3X_KEY_ALIAS }}
+          R3X_KEY_PASSWORD: ${{ secrets.R3X_KEY_PASSWORD }}
+        working-directory: android
+        run: |
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/r3x.jks"
+          R3X_KEYSTORE="$RUNNER_TEMP/r3x.jks" ./gradlew bundleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_KS == 'true'
+        with:
+          name: r3x-mfd-mobile-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
