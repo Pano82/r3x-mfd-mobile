@@ -1,12 +1,16 @@
 # Baut bei jedem Hochladen auf GitHub die Android-App.
-# Ergebnis unter Actions → letzter Lauf → Artifacts:
-#   r3x-mfd-mobile-apk  = Test-APK zum direkten Installieren auf dem Handy
-#   r3x-mfd-mobile-aab  = signiertes App-Bundle für den Play Store (nur wenn die Keystore-Secrets eingetragen sind)
+# Ergebnis unter Actions → Lauf → Artifacts:
+#   r3x-mobile-apk  = APK zum direkten Installieren (mit festem Schlüssel signiert, sobald die Secrets eingetragen sind)
+#   r3x-mobile-aab  = signiertes App-Bundle für den Play Store (nur mit Secrets)
+# Neuer Tag (z. B. v4.1-beta) → zusätzlich automatisch ein GitHub-Release mit der APK (Tag mit "beta" = Pre-release).
 name: Android APK
 
 on:
   push:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -25,7 +29,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      
+
+      # Android-SDK ist auf ubuntu-latest vorinstalliert (setup-android@v3 scheitert mit cmdline-tools 16)
+
       - name: Oberfläche bauen
         run: |
           npm ci
@@ -33,18 +39,7 @@ jobs:
           npm run build
           npx cap sync android
 
-      - name: Test-APK bauen
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: r3x-mfd-mobile-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Play-Store-Bundle bauen (signiert)
+      - name: APK und Bundle bauen (fester Schlüssel)
         if: env.HAS_KS == 'true'
         env:
           KS: ${{ secrets.R3X_KEYSTORE_BASE64 }}
@@ -53,11 +48,35 @@ jobs:
           R3X_KEY_PASSWORD: ${{ secrets.R3X_KEY_PASSWORD }}
         working-directory: android
         run: |
+          chmod +x gradlew
           echo "$KS" | base64 -d > "$RUNNER_TEMP/r3x.jks"
-          R3X_KEYSTORE="$RUNNER_TEMP/r3x.jks" ./gradlew bundleRelease --no-daemon
+          R3X_KEYSTORE="$RUNNER_TEMP/r3x.jks" ./gradlew assembleRelease bundleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/r3x-mobile.apk"
+
+      - name: Test-APK bauen (ohne Secrets, zufälliger Testschlüssel)
+        if: env.HAS_KS != 'true'
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/r3x-mobile.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r3x-mobile-apk
+          path: r3x-mobile.apk
 
       - uses: actions/upload-artifact@v4
         if: env.HAS_KS == 'true'
         with:
-          name: r3x-mfd-mobile-aab
+          name: r3x-mobile-aab
           path: android/app/build/outputs/bundle/release/app-release.aab
+
+      - name: GitHub-Release anlegen (nur bei neuem Tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: R3x Mobile ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, 'beta') }}
+          files: r3x-mobile.apk
+          generate_release_notes: true
