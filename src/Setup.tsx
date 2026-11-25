@@ -2,7 +2,7 @@
 // Sprache → WLAN → Fahrzeug & Steuergerät → Verbindungstest → Einheiten → Aussehen → Fertig.
 // Jederzeit neu startbar (EINSTELLUNGEN → SYSTEM). Nur Steuergerät ändern: only="ecu".
 import { useContext, useEffect, useState } from "react";
-import { Cfg, DESIGNS, FONTS, T, TaillightLogo, WifiPanel, post, rfetch, useConsult } from "./App";
+import { Cfg, DESIGNS, FONTS, T, TaillightLogo, WifiPanel, post, rfetch, useConsult, usePortrait } from "./App";
 import type { DesignKey, FontKey, Lang } from "./App";
 import { APP } from "./platform";
 
@@ -138,11 +138,11 @@ const W = {
 // App: eigene Begrüßung; CAN- und Power-FC-Steuergeräte gibt es (noch) nur am Pi
 if (APP) {
   const X: Record<Lang, { welcomeSub: string; piOnly: string; piOnlyMsg: string }> = {
-    de: { welcomeSub: "Richten wir R3x MFD Mobile in wenigen Schritten ein.", piOnly: "NUR R34 OS (PI)", piOnlyMsg: "geht in der App noch nicht – nur mit R34 OS am Raspberry Pi." },
-    en: { welcomeSub: "Let's set up R3x MFD Mobile in a few steps.", piOnly: "R34 OS (PI) ONLY", piOnlyMsg: "is not available in the app yet – only with R34 OS on the Raspberry Pi." },
-    es: { welcomeSub: "Configuremos R3x MFD Mobile en pocos pasos.", piOnly: "SOLO R34 OS (PI)", piOnlyMsg: "aún no está disponible en la app – solo con R34 OS en la Raspberry Pi." },
-    el: { welcomeSub: "Ας ρυθμίσουμε το R3x MFD Mobile σε λίγα βήματα.", piOnly: "ΜΟΝΟ R34 OS (PI)", piOnlyMsg: "δεν είναι ακόμη διαθέσιμο στην εφαρμογή – μόνο με R34 OS στο Raspberry Pi." },
-    ja: { welcomeSub: "数ステップで R3x MFD Mobile を設定しましょう。", piOnly: "R34 OS（Pi）のみ", piOnlyMsg: "はアプリではまだ使えません – Raspberry Pi の R34 OS のみ対応。" },
+    de: { welcomeSub: "Richten wir R3x Mobile in wenigen Schritten ein.", piOnly: "NUR R34 OS (PI)", piOnlyMsg: "geht in der App noch nicht – nur mit R34 OS am Raspberry Pi." },
+    en: { welcomeSub: "Let's set up R3x Mobile in a few steps.", piOnly: "R34 OS (PI) ONLY", piOnlyMsg: "is not available in the app yet – only with R34 OS on the Raspberry Pi." },
+    es: { welcomeSub: "Configuremos R3x Mobile en pocos pasos.", piOnly: "SOLO R34 OS (PI)", piOnlyMsg: "aún no está disponible en la app – solo con R34 OS en la Raspberry Pi." },
+    el: { welcomeSub: "Ας ρυθμίσουμε το R3x Mobile σε λίγα βήματα.", piOnly: "ΜΟΝΟ R34 OS (PI)", piOnlyMsg: "δεν είναι ακόμη διαθέσιμο στην εφαρμογή – μόνο με R34 OS στο Raspberry Pi." },
+    ja: { welcomeSub: "数ステップで R3x Mobile を設定しましょう。", piOnly: "R34 OS（Pi）のみ", piOnlyMsg: "はアプリではまだ使えません – Raspberry Pi の R34 OS のみ対応。" },
   };
   for (const k of Object.keys(X) as Lang[]) Object.assign(W[k], X[k]);
 }
@@ -162,6 +162,7 @@ export function profileLabel(p: Profile | undefined, w: WD) {
 type Step = "lang" | "wifi" | "ecu" | "conn" | "link" | "hal" | "fc" | "test" | "tps" | "sensors" | "units" | "look" | "done";
 export function Setup({ start = 0, only, onDone }: { start?: number; only?: "ecu"; onDone: () => void }) {
   const { s, setS } = useContext(Cfg);
+  const portrait = usePortrait();
   const w = W[s.lang]; const t = T[s.lang];
   const [info, setInfo] = useState<EcuInfo | null>(null);
   const cur = info?.profiles.find((p) => p.id === info.profile);
@@ -199,6 +200,8 @@ export function Setup({ start = 0, only, onDone }: { start?: number; only?: "ecu
   };
 
   const big = "font-[family-name:var(--font-display)]";
+  // Fußleiste: quer feste Breiten, hochkant teilen sich die Knöpfe die Zeile
+  const fb = (wq: string) => (portrait ? "min-w-0 flex-1 truncate px-1 tracking-wide" : `${wq} tracking-widest`);
   const card = (on: boolean, dim = false) => `flex min-h-0 min-w-0 flex-col justify-center border px-2 py-1 text-left ${on ? "border-primary bg-primary/15 text-primary" : dim ? "text-muted-foreground opacity-60" : "text-foreground"}`;
   const sel = (on: boolean) => (on ? "border-primary bg-primary text-primary-foreground" : "text-muted-foreground");
   const title = { lang: w.welcome, wifi: w.wifi, ecu: w.ecu, conn: w.conn, link: w.link, hal: w.hal, fc: w.fc, test: w.test, tps: w.tps, sensors: w.sensors, units: w.units, look: w.look, done: w.done }[step];
@@ -208,7 +211,7 @@ export function Setup({ start = 0, only, onDone }: { start?: number; only?: "ecu
     <div className="fixed inset-0 z-50 flex flex-col gap-2 p-3" style={{ background: "var(--background)" }}>
       <div className="flex shrink-0 items-center gap-3">
         <TaillightLogo mode={busy ? "load" : "idle"} className="h-[calc(1.75rem/var(--fscale,1))] w-auto" />
-        <div className={`${big} flex-1 truncate text-lg tracking-widest text-primary`}>{title}</div>
+        <div className={`${big} flex-1 text-primary ${portrait ? "text-sm leading-tight tracking-wide" : "truncate text-lg tracking-widest"}`}>{title}</div>
         <div className="flex shrink-0 gap-1.5">{steps.map((_, k) => <span key={k} className={`h-2 w-2 rounded-full ${k === i ? "bg-primary" : k < i ? "bg-primary/50" : "bg-muted"}`} />)}</div>
       </div>
 
@@ -217,7 +220,7 @@ export function Setup({ start = 0, only, onDone }: { start?: number; only?: "ecu
           <div className="flex h-full flex-col items-center justify-center gap-4">
             <TaillightLogo mode="idle" lit={[true, true, true, true]} className="h-[calc(4rem/var(--fscale,1))] w-auto" />
             <div className="text-sm text-muted-foreground">{w.welcomeSub}</div>
-            <div className="grid w-full max-w-2xl grid-cols-5 gap-2">
+            <div className={`grid w-full max-w-2xl gap-2 ${portrait ? "grid-cols-2" : "grid-cols-5"}`}>
               {LANGS.map(([k, l]) => <button key={k} onClick={() => setS((p) => ({ ...p, lang: k }))} className={`min-h-14 border text-sm tracking-wide ${sel(s.lang === k)}`}>{l}</button>)}
             </div>
           </div>
@@ -237,7 +240,7 @@ export function Setup({ start = 0, only, onDone }: { start?: number; only?: "ecu
               <div className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{note || (scan ? (scan.consult ? w.foundConsult : scan.can.length ? w.foundCan : scan.silent ? w.silent : w.nothing) : w.ecuSub)}</div>
               <button onClick={autoScan} disabled={busy} className="min-h-10 shrink-0 border border-accent px-3 text-xs tracking-widest text-accent disabled:opacity-50">⟳ {busy ? w.scanning : w.auto}</button>
             </div>
-            <div className="grid min-h-0 flex-1 grid-cols-4 gap-2">
+            <div className={`grid min-h-0 flex-1 gap-2 ${portrait ? "grid-cols-2 overflow-y-auto" : "grid-cols-4"}`}>
               {GROUPS.map((g) => (
                 <div key={g} className="mfd-panel flex min-h-0 min-w-0 flex-col gap-1 p-1.5">
                   <div className="shrink-0 truncate text-[0.65rem] tracking-[0.2em] text-muted-foreground">{w[`g_${g}` as keyof WD]}</div>
@@ -339,11 +342,11 @@ export function Setup({ start = 0, only, onDone }: { start?: number; only?: "ecu
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {i > 0 ? <button onClick={back} className="min-h-12 w-36 border text-sm tracking-widest text-muted-foreground">‹ {w.back}</button> : <span className="w-36" />}
-        <div className="flex-1" />
-        {only === "ecu" && step !== steps[steps.length - 1] && <button onClick={onDone} className="min-h-12 w-36 border text-sm tracking-widest text-muted-foreground">{w.close}</button>}
-        {!only && step !== "done" && step !== "lang" && <button onClick={next} className="min-h-12 w-40 border text-sm tracking-widest text-muted-foreground">{w.skip}</button>}
-        <button onClick={next} className="min-h-12 w-48 border border-primary bg-primary text-sm tracking-widest text-primary-foreground">{step === "done" ? w.go : step === steps[steps.length - 1] ? w.done : `${w.next} ›`}</button>
+        {i > 0 ? <button onClick={back} className={`min-h-12 border text-sm text-muted-foreground ${fb("w-36")}`}>‹ {w.back}</button> : <span className={fb("w-36")} />}
+        {!portrait && <div className="flex-1" />}
+        {only === "ecu" && step !== steps[steps.length - 1] && <button onClick={onDone} className={`min-h-12 border text-sm text-muted-foreground ${fb("w-36")}`}>{w.close}</button>}
+        {!only && step !== "done" && step !== "lang" && <button onClick={next} className={`min-h-12 border text-sm text-muted-foreground ${fb("w-40")}`}>{w.skip}</button>}
+        <button onClick={next} className={`min-h-12 border border-primary bg-primary text-sm text-primary-foreground ${fb("w-48")}`}>{step === "done" ? w.go : step === steps[steps.length - 1] ? w.done : `${w.next} ›`}</button>
       </div>
     </div>
   );

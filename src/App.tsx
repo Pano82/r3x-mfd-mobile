@@ -17,13 +17,23 @@ export type Lang = "de" | "en" | "es" | "el" | "ja";
 // 7-Zoll-Panels: 800x480 (Raspberry-Pi-Touch-Display) und 1024x600 (HDMI-Panel).
 // Die UI wird über die Wurzel- Schriftgröße maßstäblich auf das Panel gesetzt.
 const FIT_BASE = { w: 1024, h: 620 };
+// App im Hochformat: eigenes Grundmaß (Handy hochkant)
+const FIT_PORTRAIT = { w: 600, h: 1000 };
 export function fitScale(w: number, h: number) {
-  const k = Math.min(w / FIT_BASE.w, h / FIT_BASE.h);
+  const b = APP && h > w ? FIT_PORTRAIT : FIT_BASE;
+  const k = Math.min(w / b.w, h / b.h);
   return Math.min(1, Math.max(APP ? 0.5 : 0.6, Math.round(k * 100) / 100));
 }
 // Eingebettet in fremde Seiten (Kiosk-Erweiterung): "#bar" = nur die obere Leiste, "#mini" = schmale MFD-Spalte (Splitscreen)
 export const EMBED: "bar" | "mini" | null = location.hash === "#bar" ? "bar" : location.hash === "#mini" ? "mini" : null;
 const toParent = (m: Record<string, unknown>) => { try { window.parent.postMessage({ r34: 1, ...m }, "*"); } catch { /* ignore */ } };
+// Hochformat (nur App): eigene Anordnung je Reiter, quer bleibt wie am Pi
+export function usePortrait() {
+  const q = () => APP && window.innerHeight > window.innerWidth;
+  const [p, setP] = useState(q);
+  useEffect(() => { const f = () => setP(q()); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
+  return p;
+}
 function useFit() {
   const [fit, setFit] = useState(1);
   useEffect(() => {
@@ -144,6 +154,27 @@ function useUnits() {
 
 // Obere Leiste: Rückleuchten, Tabs, WLAN/BT, Uhr – in der Oberfläche und (über die Erweiterung) auf jeder fremden Seite
 function TopBar({ t, s, net, tab, soft, hue, onTab, split, onSplit }: { t: Dict; s: Settings; net: Net; tab: Tab | null; soft?: Tab; hue?: CSSProperties; onTab: (k: Tab) => void; split?: boolean; onSplit?: () => void }) {
+  const portrait = usePortrait();
+  if (portrait) return (
+    <header className="flex shrink-0 flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <StatusLogo t={t} tapFx={s.tapFx} />
+        <div className="flex shrink-0 items-center gap-2 text-xs" style={hue}>
+          {net.bt.length > 0 && <span className="text-primary">BT</span>}
+          <Clock h12={s.lang === "en"} />
+        </div>
+      </div>
+      <nav className="grid grid-cols-[1fr_1.35fr_1fr_0.6fr] gap-1" style={hue}>
+        {TABS.map((k) => (
+          <button key={k} data-k={k} onClick={() => onTab(k)}
+            aria-label={t[k]} title={t[k]}
+            className={`min-h-10 min-w-0 truncate border px-1 py-1.5 font-[family-name:var(--font-display)] ${k === "settings" ? "text-lg leading-none" : "text-xs"} ${tab === k ? "border-primary bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+            {k === "settings" ? "⚙" : t[k]}
+          </button>
+        ))}
+      </nav>
+    </header>
+  );
   return (
     <header className="flex shrink-0 items-center justify-between gap-3">
       <StatusLogo t={t} tapFx={s.tapFx} />
@@ -310,6 +341,7 @@ function Toggle({ on, onClick, t }: { on: boolean; onClick: () => void; t: Dict 
 
 function SettingsView({ s, setS, t }: { s: Settings; setS: (f: (p: Settings) => Settings) => void; t: Dict }) {
   const net = useNet();
+  const portrait = usePortrait();
   const [panel, setPanel] = useState<"" | "wifi" | "bt" | "limits" | "system">("");
   const bars = Math.ceil(net.signal / 25);
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS((p) => ({ ...p, [k]: v }));
@@ -317,9 +349,10 @@ function SettingsView({ s, setS, t }: { s: Settings; setS: (f: (p: Settings) => 
   const btn = "h-full min-h-9 min-w-0 truncate border px-0.5 text-[0.8rem] tracking-wide";
   const sel = (on: boolean) => (on ? "border-primary bg-primary text-primary-foreground" : "text-muted-foreground");
   return (
-    <div className="relative grid h-full grid-rows-[3fr_3fr_2fr] gap-2 overflow-hidden">
-      <div className="grid min-h-0 grid-cols-3 gap-2">
-        {APP ? <AdapterPanel t={t} net={net} /> : <>
+    <div className="relative h-full">
+    <div className={portrait ? "flex h-full flex-col gap-2 overflow-y-auto" : "grid h-full grid-rows-[3fr_3fr_2fr] gap-2 overflow-hidden"}>
+      <div className={portrait ? "grid shrink-0 grid-cols-1 gap-2" : "grid min-h-0 grid-cols-3 gap-2"}>
+        {APP ? <AdapterPanel t={t} net={net} wide={!portrait} /> : <>
         <div className="mfd-panel flex min-w-0 flex-col gap-2 p-2">
           <div className="flex items-center justify-between gap-2"><div className={head}>{t.wifi}</div><Toggle on={s.wifi} onClick={() => { set("wifi", !s.wifi); api("wifi", !s.wifi); }} t={t} /></div>
           <button disabled={!s.wifi} onClick={() => setPanel("wifi")} className="flex min-h-9 min-w-0 flex-1 items-center gap-2 border px-2 text-left disabled:opacity-40">
@@ -348,7 +381,7 @@ function SettingsView({ s, setS, t }: { s: Settings; setS: (f: (p: Settings) => 
           </div>
         </div>
       </div>
-      <div className="grid min-h-0 grid-cols-[2fr_3fr] gap-2">
+      <div className={portrait ? "grid shrink-0 grid-cols-1 gap-2" : "grid min-h-0 grid-cols-[2fr_3fr] gap-2"}>
         <div className="mfd-panel flex min-w-0 flex-col p-2">
           <div className={`${head} mb-1`}>{t.font}</div>
           <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-3 gap-1">
@@ -372,8 +405,8 @@ function SettingsView({ s, setS, t }: { s: Settings; setS: (f: (p: Settings) => 
           </div>
         </div>
       </div>
-      <div className="mfd-panel flex min-h-0 flex-col justify-center p-2">
-        <div className="flex items-center justify-between gap-2"><div className={head}>{t.display}</div>
+      <div className={`mfd-panel flex flex-col justify-center p-2 ${portrait ? "shrink-0" : "min-h-0"}`}>
+        <div className={`flex items-center justify-between gap-2 ${portrait ? "flex-wrap" : ""}`}><div className={head}>{t.display}</div>
           <div className="ml-auto flex items-center gap-1">
             <span className="mr-1 truncate text-xs tracking-widest text-muted-foreground">{t.tapFx}</span>
             {([[true, t.active], [false, t.passive]] as [boolean, string][]).map(([v, l]) => (
@@ -383,7 +416,7 @@ function SettingsView({ s, setS, t }: { s: Settings; setS: (f: (p: Settings) => 
           <button onClick={() => setPanel("limits")} className="min-h-7 shrink-0 border border-primary px-3 text-xs tracking-wide text-primary">{t.limits} ›</button>
           <button onClick={() => setS((p) => ({ ...p, contrast: 100, brightness: 100, tint: 0 }))} className="min-h-7 shrink-0 border border-accent px-3 text-xs text-accent">{t.reset}</button>
         </div>
-        <div className="mt-1 grid grid-cols-3 gap-4">
+        <div className={`mt-1 grid gap-4 ${portrait ? "grid-cols-1" : "grid-cols-3"}`}>
           {([["contrast", t.contrast, 50, 150, "%"], ["brightness", t.brightness, 30, 130, "%"], ["tint", t.tint, -180, 180, "°"]] as const).map(([k, l, min, max, u]) => (
             <div key={k} className="min-w-0">
               <div className="flex items-baseline justify-between gap-1">
@@ -395,6 +428,7 @@ function SettingsView({ s, setS, t }: { s: Settings; setS: (f: (p: Settings) => 
           ))}
         </div>
       </div>
+    </div>
       {panel === "wifi" && <WifiPanel t={t} onClose={() => setPanel("")} />}
       {panel === "bt" && <BtPanel t={t} onClose={() => setPanel("")} />}
       {panel === "limits" && <LimitsPanel t={t} onClose={() => setPanel("")} />}
@@ -431,6 +465,7 @@ const LIMIT_ROWS: { k: keyof Limits; label: string; kind: Kind; step: number; mi
 ];
 function LimitsPanel({ t, onClose }: { t: Dict; onClose: () => void }) {
   const { setS } = useContext(Cfg);
+  const portrait = usePortrait();
   const { u, lim } = useUnits();
   const change = (k: keyof Limits, v: number) => setS((p) => ({ ...p, limits: { ...DEF_LIMITS, ...p.limits, [k]: v } }));
   return (
@@ -440,7 +475,7 @@ function LimitsPanel({ t, onClose }: { t: Dict; onClose: () => void }) {
         <button onClick={() => setS((p) => ({ ...p, limits: DEF_LIMITS }))} className="min-h-9 border border-accent px-3 text-xs tracking-widest text-accent">{t.resetApps}</button>
         <button onClick={onClose} className="min-h-9 border px-3 text-xs tracking-widest text-muted-foreground">{t.close}</button>
       </div>
-      <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-2">
+      <div className={`grid min-h-0 flex-1 auto-rows-fr gap-2 ${portrait ? "grid-cols-1" : "grid-cols-2"}`}>
         {LIMIT_ROWS.map((r) => {
           const v = lim[r.k];
           const d = show(r.kind, v, u, r.dec, r.unit);
@@ -468,6 +503,7 @@ function LimitsPanel({ t, onClose }: { t: Dict; onClose: () => void }) {
 type Upd = { id: number; file: string; version: string };
 function SystemPanel({ t, onClose }: { t: Dict; onClose: () => void }) {
   const { s } = useContext(Cfg); const w = SETUP_T[s.lang];
+  const portrait = usePortrait();
   const [ecu, setEcu] = useState<EcuInfo | null>(null);
   useEffect(() => { rfetch("/api/ecu").then((r) => r.json()).then(setEcu).catch(() => undefined); }, []);
   // Diagnose-Aufzeichnung (60 s Rohdaten auf USB-Stick)
@@ -496,7 +532,7 @@ function SystemPanel({ t, onClose }: { t: Dict; onClose: () => void }) {
         <div className="flex-1 text-xs tracking-[0.3em] text-muted-foreground">{t.system}</div>
         <button onClick={onClose} className="min-h-9 border px-3 text-xs tracking-widest text-muted-foreground">{t.close}</button>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[2fr_1fr] gap-2">
+      <div className={portrait ? "flex min-h-0 flex-1 flex-col-reverse gap-2 overflow-y-auto" : "grid min-h-0 flex-1 grid-cols-[2fr_1fr] gap-2"}>
         <div className="mfd-panel flex min-h-0 flex-col gap-2 p-3">
           <div className="flex items-baseline gap-2"><span className="text-xs tracking-widest text-muted-foreground">{t.version}</span><span className="font-[family-name:var(--font-display)] text-2xl text-primary">{info?.version ?? "…"}</span></div>
           {!APP && <><div className="flex items-center justify-between gap-2">
@@ -539,7 +575,7 @@ function SystemPanel({ t, onClose }: { t: Dict; onClose: () => void }) {
 }
 
 // App: statt WLAN/Bluetooth des Pi – Consult-Adapter und Fahrzeug auf einen Blick
-function AdapterPanel({ t, net }: { t: Dict; net: Net }) {
+function AdapterPanel({ t, net, wide }: { t: Dict; net: Net; wide: boolean }) {
   const { s } = useContext(Cfg); const w = SETUP_T[s.lang];
   const [ecu, setEcu] = useState<EcuInfo | null>(null);
   useEffect(() => { rfetch("/api/ecu").then((r) => r.json()).then(setEcu).catch(() => undefined); }, [net.bt.length]);
@@ -547,7 +583,7 @@ function AdapterPanel({ t, net }: { t: Dict; net: Net }) {
   const live = net.bt.length > 0;
   const head = "text-xs tracking-[0.3em] text-muted-foreground";
   return (
-    <div className="mfd-panel col-span-2 flex min-w-0 flex-col gap-2 p-2">
+    <div className={`mfd-panel flex min-w-0 flex-col gap-2 p-2 ${wide ? "col-span-2" : ""}`}>
       <div className="flex items-center justify-between gap-2">
         <div className={head}>{t.adapter}</div>
         <span className={`text-xs tracking-widest ${live ? "text-primary" : "text-accent"}`}>{live ? "● " + t.connected : cur?.driver === "demo" ? "DEMO" : "—"}</span>
@@ -565,7 +601,7 @@ function AdapterPanel({ t, net }: { t: Dict; net: Net }) {
 function AppInfo() {
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center gap-1 text-sm text-muted-foreground">
-      <div className="font-[family-name:var(--font-display)] text-lg tracking-widest text-foreground">R3x MFD MOBILE</div>
+      <div className="font-[family-name:var(--font-display)] text-lg tracking-widest text-foreground">R3x MOBILE</div>
       <div>M-Industries · mindustries.org</div>
       <div className="text-xs">Basis: R34 OS 3.221 · Nissan Consult I über Bluetooth (SPP)</div>
     </div>
@@ -678,6 +714,7 @@ function Clock({ h12 }: { h12: boolean }) {
 }
 
 function Boot({ onDone }: { onDone: () => void }) {
+  const portrait = usePortrait();
   const [p, setP] = useState(0);
   const g = useConsult();
   useEffect(() => {
@@ -699,7 +736,7 @@ function Boot({ onDone }: { onDone: () => void }) {
       {ver && <div className="absolute right-4 top-3 text-xs tracking-[0.25em] text-muted-foreground">VERSION {ver.toUpperCase()}</div>}
       <TaillightLogo mode={full ? "tap" : "idle"} parts={full ? undefined : parts} className="h-[calc(6rem/var(--fscale,1))] w-auto max-w-[80vw]" />
       <div className="flex flex-col items-center gap-2">
-        <div className="animate-in fade-in font-[family-name:var(--font-display)] text-5xl font-extrabold tracking-[0.18em] text-white duration-1000">M-INDUSTRIES</div>
+        <div className={`animate-in fade-in font-[family-name:var(--font-display)] font-extrabold tracking-[0.18em] text-white duration-1000 ${portrait ? "text-3xl" : "text-5xl"}`}>M-INDUSTRIES</div>
         <div className="text-xs tracking-[0.5em] text-muted-foreground">MINDUSTRIES.ORG</div>
       </div>
       <div className="h-6 text-sm tracking-widest text-primary">{p > 50 && <span>ECU {g.live ? "OK" : "—"} · GPS {APP ? (g.fix ? "OK" : "—") : `${g.sats} SAT`}</span>}</div>
@@ -738,14 +775,14 @@ function useNet() {
 const api = (k: "wifi" | "bt", on: boolean) => rfetch(`/api/${k}?on=${on ? 1 : 0}`).catch(() => undefined);
 
 // Rundinstrument; Antippen wechselt die Einheit
-function Gauge({ label, value, min, max, kind, dec = 0, hot: hotIn, ok = true }: { label: string; value: number; min: number; max: number; kind: Kind; dec?: number; hot: boolean; ok?: boolean }) {
+function Gauge({ label, value, min, max, kind, dec = 0, hot: hotIn, ok = true, span = false }: { label: string; value: number; min: number; max: number; kind: Kind; dec?: number; hot: boolean; ok?: boolean; span?: boolean }) {
   const { u, flip } = useUnits();
   const hot = ok && hotIn;
   const pct = ok ? Math.min(1, Math.max(0, (value - min) / (max - min))) : 0;
   const r = 70, c = Math.PI * r * 1.5;
   const d = show(kind, value, u, dec, "", ok);
   return (
-    <button type="button" onClick={() => flip(kind)} className={`mfd-panel flex min-h-0 min-w-0 flex-col items-center p-2 ${ok ? "" : "opacity-50"}`}>
+    <button type="button" onClick={() => flip(kind)} className={`mfd-panel flex min-h-0 min-w-0 flex-col items-center p-2 ${ok ? "" : "opacity-50"} ${span ? "col-span-2" : ""}`}>
       <div className="shrink-0 truncate text-lg font-bold tracking-[0.15em] text-foreground">{label}</div>
       <svg viewBox="8 12 164 150" className="min-h-0 w-full flex-1">
         <circle cx="90" cy="90" r={r} fill="none" stroke="var(--muted)" strokeWidth="13" strokeDasharray={`${c} 999`} transform="rotate(135 90 90)" />
@@ -908,6 +945,7 @@ function warnings(d: Live, lim: Limits) {
 }
 function Mfd({ compact = false }: { compact?: boolean }) {
   const d = useConsult();
+  const portrait = usePortrait();
   const { u, lim, flip } = useUnits();
   const w = warnings(d, lim);
   if (compact) {
@@ -926,10 +964,12 @@ function Mfd({ compact = false }: { compact?: boolean }) {
     ...(has(d, "oilp") ? [["OIL PRESS", d.oilp, "press", 1, "", w.oilP, okOf(d, "oilp")] as [string, number, Kind, number, string, boolean, boolean]] : []),
   ];
   const gauges = 1 + +has(d, "boost") + +has(d, "oilt");
+  // Hochformat: bei drei Instrumenten Ladedruck groß oben, Öl + Wasser darunter; Kacheln zweispaltig
+  const gCols = portrait ? Math.min(gauges, 2) : gauges;
   return (
     <div className="grid h-full grid-rows-[minmax(0,1fr)_auto_auto] gap-2 overflow-hidden">
-      <div className="grid min-h-0 gap-2" style={{ gridTemplateColumns: `repeat(${gauges}, minmax(0, 1fr))` }}>
-        {has(d, "boost") && <Gauge label="BOOST" value={d.boost} min={-1} max={Math.max(1.2, lim.boost + 0.2)} kind="press" dec={2} hot={w.boost} ok={okOf(d, "boost")} />}
+      <div className="grid min-h-0 gap-2" style={{ gridTemplateColumns: `repeat(${gCols}, minmax(0, 1fr))` }}>
+        {has(d, "boost") && <Gauge span={portrait && gauges === 3} label="BOOST" value={d.boost} min={-1} max={Math.max(1.2, lim.boost + 0.2)} kind="press" dec={2} hot={w.boost} ok={okOf(d, "boost")} />}
         {has(d, "oilt") && <Gauge label="OIL TEMP" value={d.oil} min={40} max={140} kind="temp" hot={w.oilT} ok={okOf(d, "oilt")} />}
         <Gauge label="WATER TEMP" value={d.water} min={40} max={120} kind="temp" hot={w.waterT} ok={d.live === 1} />
       </div>
@@ -939,7 +979,7 @@ function Mfd({ compact = false }: { compact?: boolean }) {
           {Array.from({ length: 40 }).map((_, i) => <div key={i} className={`flex-1 ${e ? rpmSeg(i, 40, d.rpm, lim.redline) : "bg-muted"}`} />)}
         </div>
       </div>
-      <div className="grid shrink-0 gap-2" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
+      <div className="grid shrink-0 gap-2" style={{ gridTemplateColumns: `repeat(${portrait ? 2 : tiles.length}, minmax(0, 1fr))` }}>
         {tiles.map(([l, v, k, dec, pu, hot, ok]) => {
           const x = show(k, v, u, dec, pu, ok);
           return (
@@ -1000,6 +1040,7 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).p
 
 function Media({ compact = false }: { compact?: boolean }) {
   const m = useContext(MusicCtx)!;
+  const portrait = usePortrait();
   const { s } = useContext(Cfg);
   const t = T[s.lang];
   const d = useConsult();
@@ -1052,9 +1093,9 @@ function Media({ compact = false }: { compact?: boolean }) {
     );
   }
   return (
-    <div className="grid h-full grid-cols-3 gap-3">
-      <div className="mfd-panel col-span-2 flex min-h-0 flex-col justify-center gap-5 p-5">{title}{progress}{buttons}{volume}</div>
-      <div className="mfd-panel flex min-h-0 flex-col gap-2 p-3">
+    <div className={portrait ? "flex h-full flex-col gap-3" : "grid h-full grid-cols-3 gap-3"}>
+      <div className={`mfd-panel flex min-h-0 flex-col justify-center gap-5 p-5 ${portrait ? "shrink-0" : "col-span-2"}`}>{title}{progress}{buttons}{volume}</div>
+      <div className={`mfd-panel flex min-h-0 flex-col gap-2 p-3 ${portrait ? "flex-1" : ""}`}>
         {rescanBtn}
         <div className="min-h-0 flex-1 space-y-1 overflow-auto text-sm">
           {m.tracks.map((tr, i) => (
@@ -1161,6 +1202,7 @@ function Nav({ split = "off", t }: { split?: SplitKey; t: Dict }) {
     }).catch(() => setMsg(t.noNet)).finally(() => setBusy(false));
   };
   const g = useConsult();
+  const portrait = usePortrait();
   const heading = Math.round(g.heading);
   const dir = t.dirs.split(",")[Math.round(((heading % 360) + 360) % 360 / 45) % 8];
   const course = `${dir} ${String(heading).padStart(3, "0")}°`;
@@ -1194,7 +1236,7 @@ function Nav({ split = "off", t }: { split?: SplitKey; t: Dict }) {
     const info: [string, string][] = [[t.course, course], [t.dest, dest || "—"], ["GPS", gpsTxt]];
     // Beide Splits gleich aufgeteilt (Maß: Musik): Karte 2/3, rechte Spalte 1/3 – die Drehzahlleiste sitzt in der rechten Spalte
     return (
-      <div className="grid h-full grid-cols-[2fr_1fr] gap-3">
+      <div className={`grid h-full gap-3 ${portrait ? "grid-rows-[3fr_2fr]" : "grid-cols-[2fr_1fr]"}`}>
         <div className="flex min-h-0 min-w-0 flex-col gap-2">
           {map}
           <div className="mfd-panel flex shrink-0 flex-col gap-2 p-2">
@@ -1212,9 +1254,9 @@ function Nav({ split = "off", t }: { split?: SplitKey; t: Dict }) {
     );
   }
   return (
-    <div className="grid h-full grid-cols-3 gap-3">
-      <div className="col-span-2 flex min-h-0">{map}</div>
-      <div className="mfd-panel flex min-h-0 flex-col gap-3 overflow-auto p-3">
+    <div className={portrait ? "flex h-full flex-col gap-3" : "grid h-full grid-cols-3 gap-3"}>
+      <div className={`flex min-h-0 ${portrait ? "flex-1" : "col-span-2"}`}>{map}</div>
+      <div className={`mfd-panel flex flex-col gap-3 overflow-auto p-3 ${portrait ? "shrink-0" : "min-h-0"}`}>
         {form}
         {turn}
         {rows.map(([l, v]) => (

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">R3x MFD Mobile</string>
-    <string name="title_activity_main">R3x MFD Mobile</string>
+    <string name="app_name">R3x Mobile</string>
+    <string name="title_activity_main">R3x Mobile</string>
     <string name="package_name">org.mindustries.r3xmfd</string>
     <string name="custom_url_scheme">org.mindustries.r3xmfd</string>
 </resources>

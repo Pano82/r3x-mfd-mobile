@@ -1,6 +1,6 @@
 {
   "appId": "org.mindustries.r3xmfd",
-  "appName": "R3x MFD Mobile",
+  "appName": "R3x Mobile",
   "webDir": "dist",
   "android": {
     "backgroundColor": "#000000"

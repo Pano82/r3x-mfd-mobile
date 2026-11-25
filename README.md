@@ -1,4 +1,4 @@
-# R3x MFD Mobile 4.0 (beta)
+# R3x Mobile 4.0 (beta)
 
 Android-App von M-Industries (mindustries.org): die Oberfläche von **R34 OS 3.221** direkt auf dem Handy, ohne Raspberry Pi.
 Live-Daten des Nissan Skyline (R32/R33/R34, Nissan Consult I) über einen Bluetooth-Consult-Adapter. Die App liest nur und schreibt nichts ins Steuergerät.
